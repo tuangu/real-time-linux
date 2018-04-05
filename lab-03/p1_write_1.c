@@ -16,10 +16,10 @@ int main(int argc, char *argv[]) {
     ssize_t ret;
     for (int i = 0; i < 100000; i++) {
         ret = write(fd, content, len);
-        //if (ret < 0) {
-        //    printf("Error: cannot write to file\n");
-        //    return -1;
-        //}
+        if (ret < 0) {
+            printf("Error: cannot write to file\n");
+            return -1;
+        }
     }
 
     return 0;
