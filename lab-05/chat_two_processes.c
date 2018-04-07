@@ -8,14 +8,21 @@ int OpenChatFellow();
 void print_log(FILE *);
 
 int main(int argc, char *argv[]) {
-    pid_t pid;
+    pid_t pid1, pid2;
     int i = 0;
     FILE *fellowLog = fopen("chatlog.txt", "a+");
 
-    pid = fork();
-    if (pid < 0) {
+    pid1 = fork();
+    if (pid1 < 0) {
         printf("ERROR: cannot create child process\n");
-    } else if (pid == 0) {
+    } else if (pid1 == 0) { // child 1
+        pid2 = fork();
+        if (pid2 < 0) {
+            printf("ERROR: cannot create child process\n");
+        } else if (pid2 > 0) {
+            exit(0); // child 1 terminated
+        }
+
         int fellowDesc = OpenChatFellow();
         FILE *fellowChat = fdopen(fellowDesc, "r");
         
@@ -47,6 +54,7 @@ int main(int argc, char *argv[]) {
     wait(NULL);
     rewind(fellowLog);
     print_log(fellowLog);
+
     fclose(fellowLog);
     exit(0);
 }
