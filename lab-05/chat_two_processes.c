@@ -41,6 +41,7 @@ int main(int argc, char *argv[]) {
         fclose(fellowChat);
         exit(0);
     }   
+    wait(NULL); // wait child 1
 
     char c;
     while((c = getchar()) != 1) {
@@ -51,7 +52,7 @@ int main(int argc, char *argv[]) {
             break;
     }
 
-    wait(NULL);
+    wait(NULL) > 0;
     rewind(fellowLog);
     print_log(fellowLog);
 
