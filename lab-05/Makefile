@@ -6,6 +6,9 @@ CC = gcc
 5a_b_p1: chat_two_processes.c InputGenDebian.o
 	$(CC) -o chat.out chat_two_processes.c InputGenDebian.o
 
+extra: extra.c InputGenDebian.o
+	$(CC) -o chat.out extra.c InputGenDebian.o 
+
 clean:
 	@rm *.out chatlog.txt 2> /dev/null || true
 
