@@ -1,5 +1,11 @@
-#ifndef _WEATHER
-#define _WEATHER
+#ifndef _WEATHER_H
+#define _WEATHER_H
+
+#include <stdio.h>
+#include <stdlib.h>
+
+#define handle_error(msg) \
+    do { perror(msg); exit(1); } while (0)
 
 #define UPDATE_INTERVAL     60          // Update weather status every 60 seconds
 
