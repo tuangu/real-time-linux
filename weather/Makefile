@@ -1,11 +1,16 @@
 CC = gcc
 TARGET = weather
+TEST = http_test
+TARGET_TEST = $(TEST)
 
 
-$(TARGET): main.c 
-	$(CC) -o $(TARGET) main.c -pthread
+$(TARGET): main.c parson/parson.c
+	$(CC) -o $(TARGET) main.c parson/parson.c -Iparson -pthread
+
+$(TEST): $(TEST).c parson/parson.c
+	$(CC) -o $(TARGET_TEST) $(TEST).c parson/parson.c -Iparson -pthread
 
 clean:
-	@rm $(TARGET) 2> /dev/null || true
+	@rm $(TARGET) $(TARGET_TEST) 2> /dev/null || true
 
 .PHONY: clean

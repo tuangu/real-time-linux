@@ -12,6 +12,7 @@
 #include <string.h>
 #include <strings.h>
 
+#include "parson/parson.h"
 #include "weather.h"
 
 #define MAX_REQUEST_BUFFER  256
@@ -39,6 +40,7 @@ const char *requestFmt =
 // http://www.csd.uoc.gr/~hy556/material/tutorials/cs556-3rd-tutorial.pdf
 // https://gist.github.com/nolim1t/126991
 
+//Initialize a socket
 int socketConnect(const char *host, in_port_t port) {
 	struct hostent *hp;
 	struct sockaddr_in addr;
@@ -62,6 +64,7 @@ int socketConnect(const char *host, in_port_t port) {
     return sock;
 }
 
+//Request weather data 
 void requestData(const char* city, char *response) {
     char request[MAX_REQUEST_BUFFER];
 
@@ -79,6 +82,82 @@ void requestData(const char* city, char *response) {
 
     shutdown(fd, SHUT_RDWR);
     close(fd);
+}
+
+// Sample response:
+// OK response
+    // HTTP/1.1 200 OK
+    // Server: openresty
+    // Date: Sun, 27 May 2018 18:08:21 GMT
+    // Content-Type: application/json; charset=utf-8
+    // Content-Length: 428
+    // Connection: keep-alive
+    // X-Cache-Key: /data/2.5/weather?q=espoo&units=metric
+    // Access-Control-Allow-Origin: *
+    // Access-Control-Allow-Credentials: true
+    // Access-Control-Allow-Methods: GET, POST
+    //
+    // {"coord":{"lon":24.66,"lat":60.22},"weather":
+    // [{"id":800,"main":"Clear","description":"clear sky","icon":"01d"}],
+    // "base":"stations","main":{"temp":19,"pressure":1028,"humidity":78,"temp_min":19,"temp_max":19},
+    // "visibility":10000,"wind":{"speed":4.6,"deg":30},"clouds":{"all":0},"dt":1527443400,
+    // "sys":{"type":1,"id":5019,"message":0.0026,"country":"FI","sunrise":1527383745,"sunset":1527448972},
+    // "id":660129,"name":"Espoo","cod":200}
+// Not Found response
+    // HTTP/1.1 404 Not Found
+    // Server: openresty
+    // Date: Sun, 27 May 2018 18:08:21 GMT
+    // Content-Type: application/json; charset=utf-8
+    // Content-Length: 40
+    // Connection: keep-alive
+    // X-Cache-Key: /data/2.5/weather?q=espooq&units=metric
+    // Access-Control-Allow-Origin: *
+    // Access-Control-Allow-Credentials: true
+    // Access-Control-Allow-Methods: GET, POST
+    // 
+    // {"cod":"404","message":"city not found"}
+//
+// Return: 
+//      0 if success, weather data is in report
+//      -1 if error (invalid city name, error in parsing response, etc.), ignore report
+int parseResponse(const char *response, struct CityReport *report) {
+    char *json;
+    JSON_Value *rootValue;
+    JSON_Object *rootObj;
+    JSON_Array *weather;
+    int cod;
+
+    // Clean up reponse, only json part left
+    char *resBegin;
+    char jsonTargetBegin = '{';
+    if ((resBegin = strchr(response, jsonTargetBegin)) != NULL) {
+        json = resBegin;
+    } else {
+        // Invalid reponse
+        // Should not reach here
+        return -1;
+    }
+#if 0
+    printf("dump json\n");
+    printf("%s\n", json);
+#endif
+    rootValue = json_parse_string(json);
+    rootObj = json_value_get_object(rootValue);
+    cod = json_object_get_number(rootObj, "cod");
+    if (cod != 200) {
+        // Error, early return
+        return -1;
+    }
+    report->city = json_object_get_string(rootObj,"name");
+    weather = json_object_get_array(rootObj, "weather");
+    report->description = json_object_get_string(
+        json_array_get_object(weather, 0), "description");
+    report->temp = json_object_dotget_number(rootObj, "main.temp");
+    report->humidity = json_object_dotget_number(rootObj, "main.humidity");
+    report->windSpeed = json_object_dotget_number(rootObj, "wind.speed");
+    report->windDegree = json_object_dotget_number(rootObj, "wind.deg");
+
+    return 0;
 }
 
 #endif
