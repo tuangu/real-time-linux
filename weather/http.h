@@ -64,13 +64,14 @@ int socketConnect(const char *host, in_port_t port) {
     return sock;
 }
 
-//Request weather data 
+// Request weather data 
+// Data is returned in the response parameter
 void requestData(const char* city, char *response) {
     char request[MAX_REQUEST_BUFFER];
 
     // Construct request header based on city name
     snprintf(request, MAX_REQUEST_BUFFER, requestFmt, city, apiKey, host);
-    printf("%s", request);
+    // printf("%s", request);
 
     // Connect and send request
     int fd = socketConnect(host, port);
@@ -148,10 +149,14 @@ int parseResponse(const char *response, struct CityReport *report) {
         // Error, early return
         return -1;
     }
-    report->city = json_object_get_string(rootObj,"name");
+    strcpy(report->cmd, "DATA");
+    // report->city = json_object_get_string(rootObj,"name");
+    strcpy(report->city, json_object_get_string(rootObj,"name"));
     weather = json_object_get_array(rootObj, "weather");
-    report->description = json_object_get_string(
-        json_array_get_object(weather, 0), "description");
+    // report->description = json_object_get_string(
+    //     json_array_get_object(weather, 0), "description");
+    strcpy(report->description, json_object_get_string(
+        json_array_get_object(weather, 0), "description"));
     report->temp = json_object_dotget_number(rootObj, "main.temp");
     report->humidity = json_object_dotget_number(rootObj, "main.humidity");
     report->windSpeed = json_object_dotget_number(rootObj, "wind.speed");

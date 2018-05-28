@@ -10,8 +10,9 @@
 #define UPDATE_INTERVAL     60          // Update weather status every 60 seconds
 
 struct CityReport {
-    char *city;
-    char *description;
+    char cmd[8]; // START, DATA, END
+    char city[32];
+    char description[32];
     float temp;
     float humidity;
     float windSpeed;
