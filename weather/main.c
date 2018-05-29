@@ -1,9 +1,12 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <signal.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "weather.h"
 #include "http.h"
@@ -11,18 +14,17 @@
 // Global stuff
 int updateInterval = UPDATE_INTERVAL;
 struct City *cityListHead = NULL;       // Head of the city's linked-list
+pid_t pidWeatherData;
+pid_t pidLog;
 
 // Terminal color code
 #define COLOR_RESET     "\x1b[0m"
 #define COLOR_BOLD      "\x1b[1m"
 #define COLOR_WHITE     "\x1b[37m"
 
-//========== Graceful termination ==========//
+//========== Termination ==========//
 
-/**
- * Free the memory
- */
-void freeList(struct City *head) {
+static void freeList(struct City *head) {
     struct City *node = head;
     while (node != NULL) {
         struct City *temp = node;
@@ -31,6 +33,31 @@ void freeList(struct City *head) {
         free(temp);
     }
     head = NULL;
+}
+
+static void byeByeParent(int signo) {
+    if (signo == SIGINT) {
+        char ch;
+        printf("\nDo you want to terminal program? [Y/N]: ");
+        scanf("%s", &ch);
+        if ((ch == 'Y') || (ch == 'y')) {
+            kill(pidWeatherData, SIGUSR1);
+            kill(pidLog, SIGUSR1);
+            freeList(cityListHead);
+            exit(signo);
+        } else {
+            signal(SIGINT, byeByeParent);
+        }
+    }
+}
+
+static void byeByeChild(int signo) {
+    if (signo == SIGINT) {
+        // do nothing
+    } else if (signo == SIGUSR1) {
+        // terminate process
+        exit(EXIT_SUCCESS);
+    }
 }
 
 //========== Command line arguments ==========//
@@ -104,27 +131,18 @@ static void parseCommand(int argc, char *argv[]) {
     }
 }
 
-int main(int argc, char *argv[]) {
-    
-    parseCommand(argc, argv);
-    
-    printf("Update interval %d\n", updateInterval);
-    struct City *list = cityListHead;
-    while (list != NULL) {
-        printf("City name: %s\n", list->report->city);
-        list = list->next;
-    }
+//========== Child processes ==========//
 
-    // Intialize logging process, terminal writing process, and
-    // weather data process
-    pid_t pidWeatherData;
-    int fdWeatherData[2];
-
+static void weatherProcess(pid_t *pidWeatherData, int fdWeatherData[2]) {
     pipe(fdWeatherData);
-    pidWeatherData = fork();
-    if(pidWeatherData < 0) {
+    *pidWeatherData = fork();
+
+    if(*pidWeatherData < 0) {
         handle_error("fork()");
-    } else if (pidWeatherData == 0) {
+    } else if (*pidWeatherData == 0) {
+        signal(SIGINT, byeByeChild);
+        signal(SIGUSR1, byeByeChild);
+
         // close the read end of the pipe
         close(fdWeatherData[0]);
 
@@ -139,6 +157,7 @@ int main(int argc, char *argv[]) {
             // Send actual weather data
             struct City *prev = NULL;
             struct City *current = cityListHead;
+
             while (current != NULL) {
                 requestData(current->report->city, response);
                 ret = parseResponse(response, &report);
@@ -159,12 +178,66 @@ int main(int argc, char *argv[]) {
             sleep(updateInterval);
         }
     }
-    
-    // close the write end of the pipe
-    close(fdWeatherData[1]);
+}
 
+static void logProcess(pid_t *pidLog, int fdLog[2]) {
+    pipe(fdLog);
+    *pidLog = fork();
+
+    if (*pidLog < 0) {
+        handle_error("pid()");
+    } else if (*pidLog == 0) {
+        signal(SIGINT, byeByeChild);
+        signal(SIGUSR1, byeByeChild);
+        
+        // close the write end
+        close(fdLog[1]);
+
+        // open log file
+        FILE *logFile = fopen("/tmp/weather.log", "w");
+        if (logFile == NULL)
+            handle_error("fopen()");
+        
+        char logbuffer[256];
+        ssize_t nlog;
+        while (1) {
+            if ((nlog = read(fdLog[0], logbuffer, 256)) > 0) {
+                fwrite(logbuffer, sizeof(char), nlog, logFile);
+            }
+        }
+
+    }
+}
+
+// Convert tm time struct to hh:mm:ss
+int chartime(const struct tm *time_ptr, char *chtime, int size) {
+    return snprintf(chtime, size, "%02d:%02d:%02d", time_ptr->tm_hour, 
+        time_ptr->tm_min, time_ptr->tm_sec);
+}
+
+int main(int argc, char *argv[]) {
+    signal(SIGINT, byeByeParent);
+    parseCommand(argc, argv);
+
+    // Weather data process
+    int fdWeatherData[2];
+    weatherProcess(&pidWeatherData, fdWeatherData);
+    close(fdWeatherData[1]);    // close the write end of the pipe
+
+    // Logging process
+    char logbuffer[256];
+    int fdLog[2];
+    logProcess(&pidLog, fdLog);
+    close(fdLog[0]);            // close the read end of the pipe    
+
+    time_t now;
+    char timebuffer[10];
+    int nlog;
+    
     while (1) {
         struct CityReport weatherReport;
+        now = time(NULL);
+        chartime(localtime(&now), timebuffer, 10);
 
         if (read(fdWeatherData[0], &weatherReport, sizeof(struct CityReport)) > 0) {
             if (strcmp(weatherReport.cmd, "START") == 0) {
@@ -175,13 +248,21 @@ int main(int argc, char *argv[]) {
                        "City", "Description", "Temp", "Humidity",
                        "Wind Speed", "Wind Degree");
                 printf(COLOR_RESET);
+
+                // send log
+                nlog = snprintf(logbuffer, 256, "\n%s New weather data received\n", timebuffer);
+                write(fdLog[1], logbuffer, nlog);
             } else if (strcmp(weatherReport.cmd, "DATA") == 0) {
                 printf("%-18s%-18s%-8.2f%-10.2f%-12.2f%-12.2f\n", 
                 weatherReport.city, weatherReport.description, weatherReport.temp, 
                 weatherReport.humidity, weatherReport.windSpeed, weatherReport.windDegree);
+
+                // send log
+                nlog = snprintf(logbuffer, 256, "%s %-18s %-18s T:%4.2f H:%4.2f WS:%4.2f WD:%4.2f\n", timebuffer, 
+                    weatherReport.city, weatherReport.description, weatherReport.temp, 
+                    weatherReport.humidity, weatherReport.windSpeed, weatherReport.windDegree);
+                write(fdLog[1], logbuffer, nlog);
             }
         }
     }
-
-    exit(0);
 }
