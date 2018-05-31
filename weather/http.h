@@ -1,3 +1,9 @@
+/**
+ * File: http.h
+ * Handle http request to get weather data using socket.
+ * Also parse the response data to get meaningful information.
+ */
+
 #ifndef _WEATHER_HTTP_H
 #define _WEATHER_HTTP_H
 

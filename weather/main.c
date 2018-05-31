@@ -1,3 +1,10 @@
+/**
+ * File: main.c
+ * Main program. There are 3 process created when the program is running.
+ * One for logging, one for getting weather, and the main process takes
+ * care of controlling chilren process and write to the terminal.
+ */
+
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
